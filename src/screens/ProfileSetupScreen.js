@@ -6,440 +6,465 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
+  SafeAreaView,
+  ScrollView,
+  Keyboard,
   Image,
+  Modal,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { createUserProfile } from '../services/profileService';
 
-const ProfileSetupScreen = () => {
+const VOLLEYBALL_POSITIONS = [
+  'Outside Hitter',
+  'Middle Blocker',
+  'Opposite Hitter',
+  'Setter',
+  'Libero',
+  'Defensive Specialist'
+];
+
+const COURT_TYPES = [
+  { id: 'beach', label: 'Beach', icon: '🏖️' },
+  { id: 'indoor', label: 'Indoor', icon: '🏟️' },
+  { id: 'grass', label: 'Grass', icon: '🌱' }
+];
+
+const ProfileSetupScreen = ({ onProfileComplete }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [profileData, setProfileData] = useState({
-    profileImage: null,
-    name: '',
-    age: '',
-    bio: '',
-    primaryPosition: '',
-    secondaryPosition: '',
-    experienceLevel: '',
-    location: '',
-    preferredCourts: []
-  });
-
   const { user } = useAuth();
 
-  const positions = [
-    'Outside Hitter',
-    'Middle Blocker', 
-    'Setter',
-    'Libero',
-    'Opposite Hitter',
-    'Defensive Specialist'
-  ];
+  // Step 1: Basic Info
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
-  const experienceLevels = [
-    { value: 'beginner', label: 'Beginner', desc: 'New to volleyball', stars: 1 },
-    { value: 'intermediate', label: 'Intermediate', desc: '1-3 years experience', stars: 2 },
-    { value: 'advanced', label: 'Advanced', desc: '3+ years, competitive play', stars: 3 },
-    { value: 'expert', label: 'Expert', desc: 'Professional/collegiate level', stars: 4 }
-  ];
+  // Step 2: Profile Details
+  const [profileImage, setProfileImage] = useState(null);
+  const [bio, setBio] = useState('');
+  const [primaryPosition, setPrimaryPosition] = useState('');
+  const [secondaryPosition, setSecondaryPosition] = useState('');
+  const [showPositionModal, setShowPositionModal] = useState(false);
+  const [positionType, setPositionType] = useState(''); // 'primary' or 'secondary'
 
-  const courtTypes = [
-    { type: 'beach', label: 'Beach', emoji: '🏖️' },
-    { type: 'indoor', label: 'Indoor', emoji: '🏢' },
-    { type: 'grass', label: 'Grass', emoji: '🌱' }
-  ];
+  // Step 3: Preferences
+  const [favoriteCourtTypes, setFavoriteCourtTypes] = useState([]);
+  const [location, setLocation] = useState('');
 
-  const handleInputChange = (field, value) => {
-    setProfileData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleCourtToggle = (courtType) => {
-    setProfileData(prev => ({
-      ...prev,
-      preferredCourts: prev.preferredCourts.includes(courtType)
-        ? prev.preferredCourts.filter(c => c !== courtType)
-        : [...prev.preferredCourts, courtType]
-    }));
-  };
-
-  const handleImageUpload = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant photo library access to upload a profile picture.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setProfileData(prev => ({
-        ...prev,
-        profileImage: result.assets[0].uri
-      }));
-    }
-  };
-
-  const validateStep = (step) => {
-    switch (step) {
-      case 1:
-        if (!profileData.name.trim()) {
-          Alert.alert('Required Field', 'Please enter your name');
-          return false;
-        }
-        if (!profileData.age || profileData.age < 13 || profileData.age > 100) {
-          Alert.alert('Invalid Age', 'Please enter a valid age between 13 and 100');
-          return false;
-        }
-        return true;
-        
-      case 2:
-        if (!profileData.primaryPosition) {
-          Alert.alert('Required Field', 'Please select your primary position');
-          return false;
-        }
-        if (!profileData.experienceLevel) {
-          Alert.alert('Required Field', 'Please select your experience level');
-          return false;
-        }
-        return true;
-        
-      case 3:
-        if (!profileData.location.trim()) {
-          Alert.alert('Required Field', 'Please enter your location');
-          return false;
-        }
-        if (profileData.preferredCourts.length === 0) {
-          Alert.alert('Required Field', 'Please select at least one preferred court type');
-          return false;
-        }
-        return true;
-        
-      default:
-        return true;
-    }
-  };
-
-  const nextStep = () => {
-    if (validateStep(currentStep)) {
-      if (currentStep < 3) {
-        setCurrentStep(currentStep + 1);
+  const handleImagePicker = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (!permissionResult.granted) {
+        Alert.alert('Permission needed', 'Please allow access to your photo library');
+        return;
       }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaType.IMAGE,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setProfileImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
     }
   };
 
-  const prevStep = () => {
+  const handleCourtTypeToggle = (courtId) => {
+    setFavoriteCourtTypes(prev => 
+      prev.includes(courtId)
+        ? prev.filter(id => id !== courtId)
+        : [...prev, courtId]
+    );
+  };
+
+  const handlePositionSelect = (position) => {
+    if (positionType === 'primary') {
+      setPrimaryPosition(position);
+    } else if (positionType === 'secondary') {
+      setSecondaryPosition(position);
+    }
+    setShowPositionModal(false);
+    setPositionType('');
+  };
+
+  const validateStep1 = () => {
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return false;
+    }
+    if (!age.trim() || isNaN(age) || parseInt(age) < 13 || parseInt(age) > 100) {
+      Alert.alert('Error', 'Please enter a valid age (13-100)');
+      return false;
+    }
+    if (!phoneNumber.trim() || phoneNumber.length < 10) {
+      Alert.alert('Error', 'Please enter a valid phone number');
+      return false;
+    }
+    return true;
+  };
+
+  const validateStep2 = () => {
+    if (!primaryPosition) {
+      Alert.alert('Error', 'Please select your primary position');
+      return false;
+    }
+    return true;
+  };
+
+  const validateStep3 = () => {
+    if (favoriteCourtTypes.length === 0) {
+      Alert.alert('Error', 'Please select at least one court type');
+      return false;
+    }
+    if (!location.trim()) {
+      Alert.alert('Error', 'Please enter your location');
+      return false;
+    }
+    return true;
+  };
+
+  const handleNext = () => {
+    Keyboard.dismiss();
+    
+    if (currentStep === 1 && validateStep1()) {
+      setCurrentStep(2);
+    } else if (currentStep === 2 && validateStep2()) {
+      setCurrentStep(3);
+    }
+  };
+
+  const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
   };
 
-  const completeSetup = async () => {
-    if (!validateStep(3)) return;
+  const handleComplete = async () => {
+    Keyboard.dismiss();
+    
+    if (!validateStep3()) return;
 
     setLoading(true);
     try {
       const userProfile = {
         uid: user.uid,
-        name: profileData.name.trim(),
-        age: parseInt(profileData.age),
-        bio: profileData.bio.trim(),
-        profileImage: profileData.profileImage,
-        primaryPosition: profileData.primaryPosition,
-        secondaryPosition: profileData.secondaryPosition || null,
-        experienceLevel: profileData.experienceLevel,
-        location: profileData.location.trim(),
-        preferredCourts: profileData.preferredCourts,
-        isProfileComplete: true
+        name: name.trim(),
+        age: parseInt(age),
+        phoneNumber: phoneNumber.trim(),
+        bio: bio.trim() || '',
+        profileImage: profileImage || null,
+        primaryPosition,
+        secondaryPosition: secondaryPosition || null,
+        experienceLevel: 'beginner', // Can be expanded later
+        location: location.trim(),
+        preferredCourts: favoriteCourtTypes,
+        isProfileComplete: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       await createUserProfile(userProfile);
-      // Navigation will be handled by the auth state change
+      
+      Alert.alert(
+        'Success!',
+        'Profile created successfully!',
+        [
+          {
+            text: 'Continue',
+            onPress: () => {
+              if (onProfileComplete) {
+                onProfileComplete();
+              }
+            }
+          }
+        ]
+      );
+      
     } catch (error) {
-      console.error('Profile setup error:', error);
-      Alert.alert('Setup Error', 'Failed to create your profile. Please try again.');
+      console.error('Profile creation error:', error);
+      Alert.alert('Error', 'Failed to create profile. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const ProgressBar = () => (
+  const renderProgressBar = () => (
     <View style={styles.progressContainer}>
-      {[1, 2, 3].map((step) => (
-        <View key={step} style={styles.progressStepContainer}>
-          <View style={[
-            styles.progressStep,
-            step <= currentStep && styles.progressStepActive
-          ]}>
-            <Text style={[
-              styles.progressStepText,
-              step <= currentStep && styles.progressStepTextActive
-            ]}>
-              {step}
-            </Text>
-          </View>
-          {step < 3 && (
-            <View style={[
-              styles.progressLine,
-              step < currentStep && styles.progressLineActive
-            ]} />
-          )}
-        </View>
-      ))}
+      <View style={styles.progressBar}>
+        <View style={[styles.progressFill, { width: `${(currentStep / 3) * 100}%` }]} />
+      </View>
+      <Text style={styles.progressText}>Step {currentStep} of 3</Text>
     </View>
   );
 
-  const StarRating = ({ count }) => (
-    <View style={styles.starContainer}>
-      {[1, 2, 3, 4].map(star => (
-        <MaterialIcons
-          key={star}
-          name="star"
-          size={16}
-          color={star <= count ? '#FCD34D' : '#E5E7EB'}
-        />
-      ))}
-    </View>
-  );
-
-  const StepOne = () => (
+  const renderStep1 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Let's set up your profile</Text>
-      <Text style={styles.stepSubtitle}>Tell us about yourself so others can get to know you</Text>
-
-      {/* Profile Image Upload */}
-      <TouchableOpacity style={styles.imageUploadContainer} onPress={handleImageUpload}>
-        <View style={styles.imageContainer}>
-          {profileData.profileImage ? (
-            <Image source={{ uri: profileData.profileImage }} style={styles.profileImage} />
-          ) : (
-            <MaterialIcons name="person" size={48} color="#9CA3AF" />
-          )}
-        </View>
-        <View style={styles.cameraIconContainer}>
-          <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
-        </View>
-        <Text style={styles.imageUploadText}>Add a profile photo</Text>
-      </TouchableOpacity>
-
-      {/* Basic Info */}
-      <View style={styles.inputContainer}>
-        <Text style={styles.inputLabel}>Name *</Text>
+      <Text style={styles.stepTitle}>Basic Information</Text>
+      <Text style={styles.stepSubtitle}>Let's start with the basics</Text>
+      
+      <View style={styles.form}>
+        <Text style={styles.label}>Full Name *</Text>
         <TextInput
           style={styles.input}
-          value={profileData.name}
-          onChangeText={(value) => handleInputChange('name', value)}
-          placeholder="Your full name"
+          value={name}
+          onChangeText={setName}
+          placeholder="Enter your full name"
           autoCapitalize="words"
+          editable={!loading}
+          maxLength={50}
         />
-
-        <Text style={styles.inputLabel}>Age *</Text>
+        
+        <Text style={styles.label}>Age *</Text>
         <TextInput
           style={styles.input}
-          value={profileData.age}
-          onChangeText={(value) => handleInputChange('age', value)}
-          placeholder="Your age"
-          keyboardType="numeric"
+          value={age}
+          onChangeText={(text) => {
+            const numbersOnly = text.replace(/[^0-9]/g, '');
+            setAge(numbersOnly);
+          }}
+          placeholder="Enter your age"
+          keyboardType="number-pad"
+          maxLength={3}
+          editable={!loading}
         />
+        
+        <Text style={styles.label}>Phone Number *</Text>
+        <TextInput
+          style={styles.input}
+          value={phoneNumber}
+          onChangeText={(text) => {
+            // Format phone number as user types
+            const cleaned = text.replace(/\D/g, '');
+            const formatted = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
+            setPhoneNumber(formatted);
+          }}
+          placeholder="(123) 456-7890"
+          keyboardType="phone-pad"
+          maxLength={14}
+          editable={!loading}
+        />
+      </View>
+    </View>
+  );
 
-        <Text style={styles.inputLabel}>Bio (Optional)</Text>
+  const renderStep2 = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>Profile Details</Text>
+      <Text style={styles.stepSubtitle}>Tell us about yourself</Text>
+      
+      <View style={styles.form}>
+        <Text style={styles.label}>Profile Picture</Text>
+        <TouchableOpacity style={styles.imageContainer} onPress={handleImagePicker}>
+          {profileImage ? (
+            <Image source={{ uri: profileImage }} style={styles.profileImage} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <MaterialIcons name="add-a-photo" size={40} color="#9CA3AF" />
+              <Text style={styles.imagePlaceholderText}>Add Photo</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        
+        <Text style={styles.label}>Bio</Text>
         <TextInput
           style={[styles.input, styles.textArea]}
-          value={profileData.bio}
-          onChangeText={(value) => handleInputChange('bio', value)}
-          placeholder="Tell others about yourself, your volleyball journey..."
+          value={bio}
+          onChangeText={setBio}
+          placeholder="Tell others about yourself..."
           multiline
           numberOfLines={4}
           maxLength={200}
+          editable={!loading}
         />
-        <Text style={styles.characterCount}>{profileData.bio.length}/200 characters</Text>
+        <Text style={styles.charCount}>{bio.length}/200</Text>
+        
+        <Text style={styles.label}>Primary Position *</Text>
+        <TouchableOpacity 
+          style={styles.selectButton}
+          onPress={() => {
+            setPositionType('primary');
+            setShowPositionModal(true);
+          }}
+        >
+          <Text style={[styles.selectButtonText, primaryPosition && styles.selectButtonTextSelected]}>
+            {primaryPosition || 'Select Primary Position'}
+          </Text>
+          <MaterialIcons name="arrow-drop-down" size={24} color="#6B7280" />
+        </TouchableOpacity>
+        
+        <Text style={styles.label}>Secondary Position</Text>
+        <TouchableOpacity 
+          style={styles.selectButton}
+          onPress={() => {
+            setPositionType('secondary');
+            setShowPositionModal(true);
+          }}
+        >
+          <Text style={[styles.selectButtonText, secondaryPosition && styles.selectButtonTextSelected]}>
+            {secondaryPosition || 'Select Secondary Position (Optional)'}
+          </Text>
+          <MaterialIcons name="arrow-drop-down" size={24} color="#6B7280" />
+        </TouchableOpacity>
       </View>
     </View>
   );
 
-  const StepTwo = () => (
+  const renderStep3 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Your volleyball info</Text>
-      <Text style={styles.stepSubtitle}>Help others understand your playing style and experience</Text>
-
-      <View style={styles.inputContainer}>
-        <Text style={styles.inputLabel}>Primary Position *</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionScroll}>
-          {positions.map(position => (
-            <TouchableOpacity
-              key={position}
-              style={[
-                styles.positionChip,
-                profileData.primaryPosition === position && styles.positionChipSelected
-              ]}
-              onPress={() => handleInputChange('primaryPosition', position)}
-            >
-              <Text style={[
-                styles.positionChipText,
-                profileData.primaryPosition === position && styles.positionChipTextSelected
-              ]}>
-                {position}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <Text style={styles.inputLabel}>Secondary Position (Optional)</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.positionScroll}>
-          {positions
-            .filter(p => p !== profileData.primaryPosition)
-            .map(position => (
-            <TouchableOpacity
-              key={position}
-              style={[
-                styles.positionChip,
-                profileData.secondaryPosition === position && styles.positionChipSelected
-              ]}
-              onPress={() => handleInputChange('secondaryPosition', position)}
-            >
-              <Text style={[
-                styles.positionChipText,
-                profileData.secondaryPosition === position && styles.positionChipTextSelected
-              ]}>
-                {position}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <Text style={styles.inputLabel}>Experience Level *</Text>
-        <View style={styles.experienceContainer}>
-          {experienceLevels.map(level => (
-            <TouchableOpacity
-              key={level.value}
-              style={[
-                styles.experienceCard,
-                profileData.experienceLevel === level.value && styles.experienceCardSelected
-              ]}
-              onPress={() => handleInputChange('experienceLevel', level.value)}
-            >
-              <View style={styles.experienceHeader}>
-                <StarRating count={level.stars} />
-                <Text style={[
-                  styles.experienceLabel,
-                  profileData.experienceLevel === level.value && styles.experienceLabelSelected
-                ]}>
-                  {level.label}
-                </Text>
-              </View>
-              <Text style={[
-                styles.experienceDesc,
-                profileData.experienceLevel === level.value && styles.experienceDescSelected
-              ]}>
-                {level.desc}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-
-  const StepThree = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Preferences & Location</Text>
-      <Text style={styles.stepSubtitle}>Help us show you the most relevant meetups</Text>
-
-      <View style={styles.inputContainer}>
-        <Text style={styles.inputLabel}>Location *</Text>
-        <View style={styles.locationInputContainer}>
-          <MaterialIcons name="location-on" size={20} color="#9CA3AF" style={styles.locationIcon} />
-          <TextInput
-            style={[styles.input, styles.locationInput]}
-            value={profileData.location}
-            onChangeText={(value) => handleInputChange('location', value)}
-            placeholder="City, State or Zip Code"
-          />
-        </View>
-        <Text style={styles.inputHint}>This helps us show you nearby meetups</Text>
-
-        <Text style={styles.inputLabel}>Preferred Court Types *</Text>
-        <Text style={styles.inputHint}>Select all that apply</Text>
+      <Text style={styles.stepTitle}>Preferences</Text>
+      <Text style={styles.stepSubtitle}>What type of volleyball do you prefer?</Text>
+      
+      <View style={styles.form}>
+        <Text style={styles.label}>Favorite Court Types *</Text>
+        <Text style={styles.helperText}>Select all that apply</Text>
         <View style={styles.courtTypesContainer}>
-          {courtTypes.map(court => (
+          {COURT_TYPES.map((court) => (
             <TouchableOpacity
-              key={court.type}
+              key={court.id}
               style={[
-                styles.courtTypeCard,
-                profileData.preferredCourts.includes(court.type) && styles.courtTypeCardSelected
+                styles.courtTypeButton,
+                favoriteCourtTypes.includes(court.id) && styles.courtTypeButtonSelected
               ]}
-              onPress={() => handleCourtToggle(court.type)}
+              onPress={() => handleCourtTypeToggle(court.id)}
             >
-              <Text style={styles.courtTypeEmoji}>{court.emoji}</Text>
+              <Text style={styles.courtTypeIcon}>{court.icon}</Text>
               <Text style={[
                 styles.courtTypeText,
-                profileData.preferredCourts.includes(court.type) && styles.courtTypeTextSelected
+                favoriteCourtTypes.includes(court.id) && styles.courtTypeTextSelected
               ]}>
                 {court.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
+        
+        <Text style={styles.label}>Location *</Text>
+        <TextInput
+          style={styles.input}
+          value={location}
+          onChangeText={setLocation}
+          placeholder="City, State (e.g., Los Angeles, CA)"
+          autoCapitalize="words"
+          editable={!loading}
+          maxLength={100}
+        />
       </View>
     </View>
   );
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile Setup</Text>
-      </View>
-
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <ProgressBar />
-        
-        <View style={styles.formContainer}>
-          {currentStep === 1 && <StepOne />}
-          {currentStep === 2 && <StepTwo />}
-          {currentStep === 3 && <StepThree />}
-        </View>
-      </ScrollView>
-
-      <View style={styles.navigationContainer}>
-        <View style={styles.buttonContainer}>
-          {currentStep > 1 && (
-            <TouchableOpacity style={styles.backButton} onPress={prevStep} disabled={loading}>
-              <Text style={styles.backButtonText}>Back</Text>
+  const renderPositionModal = () => (
+    <Modal
+      visible={showPositionModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowPositionModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
+              Select {positionType === 'primary' ? 'Primary' : 'Secondary'} Position
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowPositionModal(false)}
+              style={styles.modalCloseButton}
+            >
+              <MaterialIcons name="close" size={24} color="#6B7280" />
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[
-              styles.continueButton,
-              currentStep === 1 && styles.continueButtonFull,
-              loading && styles.continueButtonDisabled
-            ]}
-            onPress={currentStep === 3 ? completeSetup : nextStep}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.continueButtonText}>
-                {currentStep === 3 ? 'Complete Setup' : 'Continue'}
-              </Text>
+          </View>
+          
+          <ScrollView style={styles.modalBody}>
+            {VOLLEYBALL_POSITIONS.map((position) => (
+              <TouchableOpacity
+                key={position}
+                style={styles.positionOption}
+                onPress={() => handlePositionSelect(position)}
+              >
+                <Text style={styles.positionOptionText}>{position}</Text>
+              </TouchableOpacity>
+            ))}
+            
+            {positionType === 'secondary' && (
+              <TouchableOpacity
+                style={styles.positionOption}
+                onPress={() => handlePositionSelect('')}
+              >
+                <Text style={[styles.positionOptionText, styles.positionOptionNone]}>
+                  None (Optional)
+                </Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </ScrollView>
         </View>
-
-        <Text style={styles.stepIndicatorText}>Step {currentStep} of 3</Text>
       </View>
-    </View>
+    </Modal>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <TouchableOpacity 
+        style={styles.dismissArea} 
+        activeOpacity={1} 
+        onPress={Keyboard.dismiss}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {renderProgressBar()}
+          
+          {currentStep === 1 && renderStep1()}
+          {currentStep === 2 && renderStep2()}
+          {currentStep === 3 && renderStep3()}
+          
+          <View style={styles.buttonContainer}>
+            {currentStep > 1 && (
+              <TouchableOpacity
+                style={[styles.button, styles.backButton]}
+                onPress={handleBack}
+                disabled={loading}
+              >
+                <Text style={styles.backButtonText}>Back</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              style={[
+                styles.button, 
+                styles.nextButton,
+                loading && styles.buttonDisabled,
+                currentStep === 1 && styles.fullWidthButton
+              ]}
+              onPress={currentStep === 3 ? handleComplete : handleNext}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.nextButtonText}>
+                  {currentStep === 3 ? 'Complete Setup' : 'Next'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </TouchableOpacity>
+      
+      {renderPositionModal()}
+    </SafeAreaView>
   );
 };
 
@@ -448,78 +473,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  header: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
+  dismissArea: {
+    flex: 1,
   },
   content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingHorizontal: 24,
-    paddingVertical: 24,
+    padding: 24,
+    minHeight: '100%',
   },
   progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 32,
   },
-  progressStepContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  progressStep: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  progressBar: {
+    height: 4,
     backgroundColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 2,
+    marginBottom: 8,
   },
-  progressStepActive: {
+  progressFill: {
+    height: '100%',
     backgroundColor: '#FB923C',
+    borderRadius: 2,
   },
-  progressStepText: {
+  progressText: {
     fontSize: 14,
-    fontWeight: 'bold',
     color: '#6B7280',
-  },
-  progressStepTextActive: {
-    color: '#FFFFFF',
-  },
-  progressLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 12,
-  },
-  progressLineActive: {
-    backgroundColor: '#FB923C',
-  },
-  formContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   stepContainer: {
-    flex: 1,
+    marginBottom: 32,
   },
   stepTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#111827',
-    marginBottom: 8,
     textAlign: 'center',
+    marginBottom: 8,
   },
   stepSubtitle: {
     fontSize: 16,
@@ -527,224 +516,205 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 32,
   },
-  imageUploadContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
+  form: {
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  imageContainer: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: '#FED7AA',
-    position: 'relative',
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 60,
-  },
-  cameraIconContainer: {
-    position: 'absolute',
-    bottom: -8,
-    right: -8,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FB923C',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageUploadText: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginTop: 8,
-  },
-  inputContainer: {
-    gap: 20,
-  },
-  inputLabel: {
+  label: {
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
+    marginBottom: 8,
+    marginTop: 16,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     fontSize: 16,
+    backgroundColor: '#FFFFFF',
+    color: '#111827',
+    minHeight: 50,
   },
   textArea: {
     height: 100,
     textAlignVertical: 'top',
   },
-  characterCount: {
+  charCount: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#9CA3AF',
     textAlign: 'right',
-    marginTop: -15,
+    marginTop: 4,
   },
-  inputHint: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: -15,
-  },
-  locationInputContainer: {
-    position: 'relative',
-  },
-  locationInput: {
-    paddingLeft: 44,
-  },
-  locationIcon: {
-    position: 'absolute',
-    left: 12,
-    top: 14,
-    zIndex: 1,
-  },
-  positionScroll: {
-    marginTop: 8,
-  },
-  positionChip: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginRight: 8,
-  },
-  positionChipSelected: {
-    backgroundColor: '#FED7AA',
-    borderColor: '#FB923C',
-  },
-  positionChipText: {
+  helperText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
+    color: '#9CA3AF',
+    marginBottom: 12,
   },
-  positionChipTextSelected: {
-    color: '#EA580C',
+  imageContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  experienceContainer: {
-    gap: 12,
+  profileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  imagePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  imagePlaceholderText: {
+    fontSize: 14,
+    color: '#9CA3AF',
     marginTop: 8,
   },
-  experienceCard: {
-    padding: 16,
-    borderWidth: 1,
+  selectButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 2,
     borderColor: '#E5E7EB',
     borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
   },
-  experienceCardSelected: {
-    backgroundColor: '#FEF3F2',
-    borderColor: '#FB923C',
-  },
-  experienceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  starContainer: {
-    flexDirection: 'row',
-    marginRight: 12,
-  },
-  experienceLabel: {
+  selectButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
+    color: '#9CA3AF',
   },
-  experienceLabelSelected: {
-    color: '#EA580C',
-  },
-  experienceDesc: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  experienceDescSelected: {
-    color: '#9A3412',
+  selectButtonTextSelected: {
+    color: '#111827',
   },
   courtTypesContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
-    marginTop: 12,
+    marginBottom: 16,
   },
-  courtTypeCard: {
+  courtTypeButton: {
     flex: 1,
+    minWidth: '30%',
     padding: 16,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#E5E7EB',
     borderRadius: 12,
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  courtTypeCardSelected: {
-    backgroundColor: '#FEF3F2',
+  courtTypeButtonSelected: {
     borderColor: '#FB923C',
+    backgroundColor: '#FFF7ED',
   },
-  courtTypeEmoji: {
+  courtTypeIcon: {
     fontSize: 24,
     marginBottom: 8,
   },
   courtTypeText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: '500',
+    color: '#6B7280',
   },
   courtTypeTextSelected: {
-    color: '#EA580C',
-  },
-  navigationContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    color: '#FB923C',
   },
   buttonContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 12,
+    marginTop: 24,
+  },
+  button: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
   },
   backButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  nextButton: {
+    flex: 2,
+    backgroundColor: '#FB923C',
+  },
+  fullWidthButton: {
+    flex: 1,
   },
   backButtonText: {
+    color: '#6B7280',
     fontSize: 16,
     fontWeight: '600',
-    color: '#6B7280',
   },
-  continueButton: {
-    flex: 1,
-    paddingVertical: 12,
-    backgroundColor: '#FB923C',
-    borderRadius: 12,
-    alignItems: 'center',
+  nextButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
-  continueButtonFull: {
-    flex: 2,
-  },
-  continueButtonDisabled: {
+  buttonDisabled: {
     opacity: 0.7,
   },
-  continueButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
-  stepIndicatorText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalBody: {
+    padding: 24,
+  },
+  positionOption: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  positionOptionText: {
+    fontSize: 16,
+    color: '#111827',
+  },
+  positionOptionNone: {
+    color: '#9CA3AF',
+    fontStyle: 'italic',
   },
 });
 
