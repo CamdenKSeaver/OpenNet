@@ -1,9 +1,8 @@
-// src/screens/AuthScreen.js
+// src/screens/AuthScreen.js - Updated with Done Buttons
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -14,6 +13,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { signInWithEmail, signUpWithEmail, signInWithGoogle } from '../services/authService';
+import DoneTextInput from '../components/DoneTextInput';
 
 const AuthScreen = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -159,31 +159,37 @@ const AuthScreen = () => {
           {/* Email Form */}
           <View style={styles.inputContainer}>
             {!isLogin && (
-              <TextInput
+              <DoneTextInput
                 style={styles.input}
                 placeholder="Full Name"
                 value={formData.name}
                 onChangeText={(value) => handleInputChange('name', value)}
                 autoCapitalize="words"
+                editable={!loading}
+                maxLength={50}
               />
             )}
             
-            <TextInput
+            <DoneTextInput
               style={styles.input}
               placeholder="Email Address"
               value={formData.email}
               onChangeText={(value) => handleInputChange('email', value)}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={!loading}
+              maxLength={100}
             />
 
             <View style={styles.passwordContainer}>
-              <TextInput
+              <DoneTextInput
                 style={styles.passwordInput}
                 placeholder="Password"
                 value={formData.password}
                 onChangeText={(value) => handleInputChange('password', value)}
                 secureTextEntry={!showPassword}
+                editable={!loading}
+                maxLength={50}
               />
               <TouchableOpacity
                 style={styles.eyeIcon}
@@ -198,12 +204,14 @@ const AuthScreen = () => {
             </View>
 
             {!isLogin && (
-              <TextInput
+              <DoneTextInput
                 style={styles.input}
                 placeholder="Confirm Password"
                 value={formData.confirmPassword}
                 onChangeText={(value) => handleInputChange('confirmPassword', value)}
                 secureTextEntry={!showPassword}
+                editable={!loading}
+                maxLength={50}
               />
             )}
 

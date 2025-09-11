@@ -1,9 +1,8 @@
-// src/screens/ProfileSetupScreen.js
+// src/screens/ProfileSetupScreen.js - Updated with Done Buttons
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -18,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { createUserProfile } from '../services/profileService';
+import DoneTextInput from '../components/DoneTextInput';
 
 const VOLLEYBALL_POSITIONS = [
   'Outside Hitter',
@@ -216,7 +216,7 @@ const ProfileSetupScreen = ({ onProfileComplete }) => {
       
       <View style={styles.form}>
         <Text style={styles.label}>Full Name *</Text>
-        <TextInput
+        <DoneTextInput
           style={styles.input}
           value={name}
           onChangeText={setName}
@@ -227,7 +227,7 @@ const ProfileSetupScreen = ({ onProfileComplete }) => {
         />
         
         <Text style={styles.label}>Age *</Text>
-        <TextInput
+        <DoneTextInput
           style={styles.input}
           value={age}
           onChangeText={(text) => {
@@ -241,7 +241,7 @@ const ProfileSetupScreen = ({ onProfileComplete }) => {
         />
         
         <Text style={styles.label}>Phone Number *</Text>
-        <TextInput
+        <DoneTextInput
           style={styles.input}
           value={phoneNumber}
           onChangeText={(text) => {
@@ -278,7 +278,7 @@ const ProfileSetupScreen = ({ onProfileComplete }) => {
         </TouchableOpacity>
         
         <Text style={styles.label}>Bio</Text>
-        <TextInput
+        <DoneTextInput
           style={[styles.input, styles.textArea]}
           value={bio}
           onChangeText={setBio}
@@ -351,7 +351,7 @@ const ProfileSetupScreen = ({ onProfileComplete }) => {
         </View>
         
         <Text style={styles.label}>Location *</Text>
-        <TextInput
+        <DoneTextInput
           style={styles.input}
           value={location}
           onChangeText={setLocation}
