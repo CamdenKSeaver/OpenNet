@@ -1,4 +1,4 @@
-// src/services/profileService.js
+// src/services/profileService.js - COMPLETE FIXED VERSION
 import { 
   doc, 
   setDoc, 
@@ -19,16 +19,54 @@ import {
 import { db, storage } from '../../firebaseConfig';
 
 /**
+ * Test Firebase Storage connectivity
+ */
+export const testStorageConnection = async () => {
+  try {
+    if (!storage) {
+      return { success: false, error: 'Storage not initialized' };
+    }
+    
+    // Try to get storage reference
+    const testRef = ref(storage, 'test');
+    console.log('🧪 Storage test - Reference created successfully');
+    
+    return { 
+      success: true, 
+      bucket: storage.app.options.storageBucket,
+      message: 'Storage connection successful' 
+    };
+  } catch (error) {
+    console.error('🧪 Storage test failed:', error);
+    return { 
+      success: false, 
+      error: error.message,
+      code: error.code 
+    };
+  }
+};
+
+/**
  * Create a new user profile
  */
 export const createUserProfile = async (profileData) => {
   try {
+    console.log('🚀 Starting profile creation for user:', profileData.uid);
+    
     const userRef = doc(db, 'users', profileData.uid);
     
     // Handle profile image upload if provided
     let profileImageUrl = null;
     if (profileData.profileImage && profileData.profileImage.startsWith('file://')) {
-      profileImageUrl = await uploadProfileImage(profileData.uid, profileData.profileImage);
+      console.log('📸 Profile image detected, starting upload...');
+      try {
+        profileImageUrl = await uploadProfileImage(profileData.uid, profileData.profileImage);
+        console.log('✅ Profile image uploaded:', profileImageUrl);
+      } catch (imageError) {
+        console.error('⚠️ Image upload failed, continuing without image:', imageError);
+        // Continue with profile creation even if image upload fails
+        profileImageUrl = null;
+      }
     }
     
     const userData = {
@@ -41,11 +79,17 @@ export const createUserProfile = async (profileData) => {
       experienceLevel: profileData.experienceLevel || 'beginner'
     };
     
+    console.log('💾 Saving profile data to Firestore...');
     await setDoc(userRef, userData);
-    console.log('Profile created successfully');
+    console.log('✅ Profile created successfully');
     return userData;
   } catch (error) {
-    console.error('Error creating profile:', error);
+    console.error('❌ Error creating profile:', error);
+    console.error('Error details:', {
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
     throw new Error(`Failed to create profile: ${error.message}`);
   }
 };
@@ -79,14 +123,20 @@ export const updateUserProfile = async (uid, updateData) => {
     
     // Handle profile image upload if new image provided
     if (updateData.profileImage && updateData.profileImage.startsWith('file://')) {
-      // Delete old image if exists
-      const currentProfile = await getUserProfile(uid);
-      if (currentProfile?.profileImage) {
-        await deleteProfileImage(uid);
+      try {
+        // Delete old image if exists
+        const currentProfile = await getUserProfile(uid);
+        if (currentProfile?.profileImage) {
+          await deleteProfileImage(uid);
+        }
+        
+        // Upload new image
+        updateData.profileImage = await uploadProfileImage(uid, updateData.profileImage);
+      } catch (imageError) {
+        console.error('⚠️ Image update failed:', imageError);
+        // Remove the problematic image from update data
+        delete updateData.profileImage;
       }
-      
-      // Upload new image
-      updateData.profileImage = await uploadProfileImage(uid, updateData.profileImage);
     }
     
     const updatedData = {
@@ -104,51 +154,79 @@ export const updateUserProfile = async (uid, updateData) => {
 };
 
 /**
- * Upload profile image to Firebase Storage
+ * Upload profile image to Firebase Storage with comprehensive error handling
  */
 export const uploadProfileImage = async (uid, imageUri) => {
   try {
-    console.log('Starting image upload for user:', uid);
-    console.log('Image URI:', imageUri);
+    console.log('📤 Starting image upload for user:', uid);
+    console.log('🖼️ Image URI:', imageUri);
     
     // Check if storage is available
     if (!storage) {
       throw new Error('Firebase Storage is not initialized. Please check your Firebase configuration.');
     }
     
+    // Validate image URI
+    if (!imageUri || !imageUri.startsWith('file://')) {
+      throw new Error('Invalid image URI provided');
+    }
+    
+    console.log('🔄 Fetching image from local URI...');
     const response = await fetch(imageUri);
     if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status}`);
+      throw new Error(`Failed to fetch image: HTTP ${response.status} - ${response.statusText}`);
     }
     
     const blob = await response.blob();
-    console.log('Image blob size:', blob.size);
+    console.log('📊 Image blob created - Size:', blob.size, 'bytes, Type:', blob.type);
+    
+    if (blob.size === 0) {
+      throw new Error('Image file is empty');
+    }
+    
+    if (blob.size > 10 * 1024 * 1024) { // 10MB limit
+      throw new Error('Image file is too large (max 10MB)');
+    }
     
     // Create a unique filename with timestamp to avoid conflicts
     const timestamp = Date.now();
-    const imageRef = ref(storage, `profile_images/${uid}_${timestamp}.jpg`);
+    const fileExtension = blob.type?.split('/')[1] || 'jpg';
+    const fileName = `${uid}_${timestamp}.${fileExtension}`;
+    const imageRef = ref(storage, `profile_images/${fileName}`);
     
-    console.log('Uploading to path:', `profile_images/${uid}_${timestamp}.jpg`);
+    console.log('☁️ Uploading to Firebase Storage:', `profile_images/${fileName}`);
     
-    const uploadTask = await uploadBytes(imageRef, blob);
-    console.log('Upload completed:', uploadTask.metadata.fullPath);
+    const uploadTask = await uploadBytes(imageRef, blob, {
+      contentType: blob.type || 'image/jpeg',
+    });
+    console.log('✅ Upload completed:', uploadTask.metadata.fullPath);
     
     const downloadURL = await getDownloadURL(imageRef);
-    console.log('Download URL obtained:', downloadURL);
+    console.log('🔗 Download URL obtained:', downloadURL);
     
     return downloadURL;
   } catch (error) {
-    console.error('Detailed error uploading profile image:', error);
-    console.error('Error code:', error.code);
-    console.error('Error message:', error.message);
+    console.error('❌ Detailed error uploading profile image:', error);
     
-    // Provide more specific error messages
+    // Provide more specific error messages based on error codes
     if (error.code === 'storage/unauthorized') {
       throw new Error('Storage access denied. Please check Firebase Storage rules.');
     } else if (error.code === 'storage/unknown') {
       throw new Error('Storage service unavailable. Please check your internet connection and Firebase configuration.');
+    } else if (error.code === 'storage/invalid-url') {
+      throw new Error('Invalid storage URL. Please check your Firebase configuration.');
+    } else if (error.code === 'storage/no-default-bucket') {
+      throw new Error('No default storage bucket found. Please check your Firebase Storage setup.');
+    } else if (error.code === 'storage/quota-exceeded') {
+      throw new Error('Storage quota exceeded. Please contact support.');
+    } else if (error.code === 'storage/unauthenticated') {
+      throw new Error('User not authenticated. Please sign in again.');
     } else if (error.message.includes('Firebase Storage is not initialized')) {
       throw new Error('Firebase Storage is not properly configured.');
+    } else if (error.message.includes('Failed to fetch image')) {
+      throw new Error('Could not read the selected image. Please try selecting a different image.');
+    } else if (error.message.includes('Network request failed')) {
+      throw new Error('Network error. Please check your internet connection.');
     }
     
     throw new Error(`Failed to upload image: ${error.message}`);
@@ -160,6 +238,7 @@ export const uploadProfileImage = async (uid, imageUri) => {
  */
 export const deleteProfileImage = async (uid) => {
   try {
+    // Try to find and delete any existing profile images for this user
     const imageRef = ref(storage, `profile_images/${uid}.jpg`);
     await deleteObject(imageRef);
     console.log('Profile image deleted successfully');
@@ -207,7 +286,7 @@ export const searchUsers = async (searchTerm, filters = {}) => {
       // Filter by name/bio if search term provided
       if (!searchTerm || 
           userData.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          userData.bio.toLowerCase().includes(searchTerm.toLowerCase())) {
+          (userData.bio && userData.bio.toLowerCase().includes(searchTerm.toLowerCase()))) {
         users.push({
           id: doc.id,
           ...userData
@@ -361,4 +440,31 @@ export const getCourtTypeDisplay = (courtType) => {
     grass: { label: 'Grass', emoji: '🌱' }
   };
   return courtTypes[courtType] || { label: courtType, emoji: '🏐' };
+};
+
+/**
+ * Create a profile without image (for testing/fallback)
+ */
+export const createProfileWithoutImage = async (profileData) => {
+  try {
+    console.log('🚀 Creating profile without image for user:', profileData.uid);
+    
+    const userRef = doc(db, 'users', profileData.uid);
+    
+    const userData = {
+      ...profileData,
+      profileImage: null, // Explicitly set to null
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      isProfileComplete: true,
+      experienceLevel: profileData.experienceLevel || 'beginner'
+    };
+    
+    await setDoc(userRef, userData);
+    console.log('✅ Profile created successfully without image');
+    return userData;
+  } catch (error) {
+    console.error('❌ Error creating profile without image:', error);
+    throw new Error(`Failed to create profile: ${error.message}`);
+  }
 };
